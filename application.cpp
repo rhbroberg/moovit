@@ -182,7 +182,7 @@ void setup() {
 
   Serial.print("done with setup\n");
   monitorAccelerometer();
-  myaccelerometer.checkAllControlRegs();
+  myaccelerometer.logControlRegs();
 
 #ifdef MINIMAL_POWER_USE
   lowPowerMode();

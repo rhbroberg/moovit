@@ -3,9 +3,12 @@
 // #define LIS331_DEBUG 1
 
 #define SCALE 0.0007324  //sets g-level (48 fullscale range)/(2^16bits) = SCALE
+#define OUT_X	0x28
+#define OUT_Y	0x2A
+#define OUT_Z	0x2C
 
 LIS331::LIS331()
-: slaveSelectPin(SS)
+: _slaveSelectPin(SS)
 {
 }
 
@@ -16,94 +19,88 @@ LIS331::LIS331()
 void
 LIS331::begin(int16_t chipSelectPin)
 {
-  slaveSelectPin = chipSelectPin;
-  pinMode(slaveSelectPin, OUTPUT);
+  _slaveSelectPin = chipSelectPin;
+  pinMode(_slaveSelectPin, OUTPUT);
   SPI.begin();
   SPI.setDataMode(SPI_MODE0);	//CPHA = CPOL = 0    MODE = 0
   SPI.setBitOrder(MSBFIRST);
-  delay(1000);
+//  delay(1000);
 
   // soft reset
   SPIwriteOneRegister(0x20, 0x37);  // normal mode, xyz-enabled
-  delay(100);
+  //delay(100);
   SPIwriteOneRegister(0x21, 0x00);  // hp filter off
-  delay(100);
+  //delay(100);
   //  SPIwriteOneRegister(0x23, 0x30);  // 24g
   SPIwriteOneRegister(0x23, 0x00);  // 6g
-  delay(100);
+  //delay(100);
 
 #ifdef LIS331_DEBUG
   Serial.println("begin\n");
 #endif
 }
 
-#ifdef NO_RHB
-//
-//  readXData(), readYData(), readZData()
-//  Read X, Y, Z registers
-//
-int16_t
-LIS331::readXData()
+const int16_t
+LIS331::readXData() const
 {
-  int16_t XDATA = SPIreadTwoRegisters(0x0E);
+  int16_t XregValue = SPIreadTwoRegisters(OUT_X);
 
 #ifdef LIS331_DEBUG
-  Serial.print("XDATA = ");
-  Serial.println(XDATA);
+  Serial.print("XregValue = ");
+  Serial.println(XregValue);
 #endif
 
-  return XDATA;
+  return XregValue;
 }
 
-int16_t
-LIS331::readYData()
+const int16_t
+LIS331::readYData() const
 {
-  int16_t YDATA = SPIreadTwoRegisters(0x10);
+  int16_t YregValue = SPIreadTwoRegisters(OUT_Y);
 
 #ifdef LIS331_DEBUG
-  Serial.print("\tYDATA = ");
-  Serial.println(YDATA);
+  Serial.print("\tYregValue = ");
+  Serial.println(YregValue);
 #endif
 
-  return YDATA;
+  return YregValue;
 }
 
-int16_t
-LIS331::readZData()
+const int16_t
+LIS331::readZData() const
 {
-  int16_t ZDATA = SPIreadTwoRegisters(0x12);
+  int16_t ZregValue = SPIreadTwoRegisters(OUT_Z);
 
 #ifdef LIS331_DEBUG
-  Serial.print("\tZDATA = ");
-  Serial.println(ZDATA);
+  Serial.print("\tZregValue = ");
+  Serial.println(ZregValue);
 #endif
 
-  return ZDATA;
+  return ZregValue;
 }
-#endif
 
 void
-LIS331::readXYZData(int16_t &XData, int16_t &YData, int16_t &ZData)
+LIS331::readXYZData(int16_t &XregValue, int16_t &YregValue, int16_t &ZregValue) const
 {
   // burst SPI read
   // A burst read of all three axis is required to guarantee all measurements correspond to same sample time
-  digitalWrite(slaveSelectPin, LOW);
+  digitalWrite(_slaveSelectPin, LOW);
   SPI.transfer(0x80 | 0x40 | 0x28);  // read consecutive starting at 0x28
-  XData = SPI.transfer(0x00);
-  XData = XData + (SPI.transfer(0x00) << 8);
+  XregValue = SPI.transfer(0x00);
+  XregValue = XregValue + (SPI.transfer(0x00) << 8);
 
-  YData = SPI.transfer(0x00);
-  YData = YData + (SPI.transfer(0x00) << 8);
+  YregValue = SPI.transfer(0x00);
+  YregValue = YregValue + (SPI.transfer(0x00) << 8);
 
-  ZData = SPI.transfer(0x00);
-  ZData = ZData + (SPI.transfer(0x00) << 8);
+  ZregValue = SPI.transfer(0x00);
+  ZregValue = ZregValue + (SPI.transfer(0x00) << 8);
 
-  digitalWrite(slaveSelectPin, HIGH);
+  digitalWrite(_slaveSelectPin, HIGH);
 
 #ifdef LIS331_DEBUG
-  Serial.print("XDATA = "); Serial.print(XData);
-  Serial.print("\tYDATA = "); Serial.print(YData);
-  Serial.print("\tZDATA = "); Serial.print(ZData);
+  Serial.print("XregValue = "); Serial.print(XregValue);
+  Serial.print("\tYregValue = "); Serial.print(YregValue);
+  Serial.print("\tZregValue = "); Serial.print(ZregValue);
 #endif
 }
 
@@ -188,12 +185,9 @@ LIS331::setupACInactivityInterrupt(int16_t threshold, int16_t time)
 }
 
 void
-LIS331::checkAllControlRegs()
+LIS331::logControlRegs()
 {
-  //byte filterCntlReg = SPIreadOneRegister(0x2C);
-  //byte ODR = filterCntlReg & 0x07;  Serial.print("ODR = ");  Serial.println(ODR, HEX);
-  //byte ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);      Serial.print("ACT_INACT_CTL_Reg = "); Serial.println(ACT_INACT_CTL_Reg, HEX);
-  digitalWrite(slaveSelectPin, LOW);
+  digitalWrite(_slaveSelectPin, LOW);
   SPI.transfer(0x80 | 0x40 | 0x20);  // read consecutive starting at 0x20
 #ifdef LIS331_DEBUG
   Serial.println("Start Burst Read of all Control Regs");
@@ -206,57 +200,54 @@ LIS331::checkAllControlRegs()
   Serial.print("Reg 26 = "); 	Serial.println(SPI.transfer(0x00), HEX);
   Serial.print("Reg 27 = "); 	Serial.println(SPI.transfer(0x00), HEX);
 #endif
-  digitalWrite(slaveSelectPin, HIGH);
+  digitalWrite(_slaveSelectPin, HIGH);
 }
 
-// Basic SPI routines to simplify code
-// read and write one register
-byte
-LIS331::SPIreadOneRegister(byte regAddress)
+const byte
+LIS331::SPIreadOneRegister(const byte regAddress) const
 {
   byte regValue = 0;
 
-  digitalWrite(slaveSelectPin, LOW);
-  SPI.transfer(regAddress | 0x80);  // read specifies 1 in top bit
+  digitalWrite(_slaveSelectPin, LOW);
+  SPI.transfer(0x80 | regAddress);
   regValue = SPI.transfer(0x00);
-  digitalWrite(slaveSelectPin, HIGH);
+  digitalWrite(_slaveSelectPin, HIGH);
+
+  return regValue;
+}
+
+const int16_t
+LIS331::SPIreadTwoRegisters(const byte regAddress) const
+{
+  int16_t regValue = 0;
+
+  digitalWrite(_slaveSelectPin, LOW);
+  SPI.transfer(0x80 | 0x40 | regAddress);  // read consecutive starting at regAddress
+  regValue = SPI.transfer(0x00);
+  regValue += (SPI.transfer(0x00) << 8);
+  digitalWrite(_slaveSelectPin, HIGH);
 
   return regValue;
 }
 
 void
-LIS331::SPIwriteOneRegister(byte regAddress, byte regValue)
+LIS331::SPIwriteOneRegister(const byte regAddress, const byte regValue) const
 {
-  digitalWrite(slaveSelectPin, LOW);
-  SPI.transfer(regAddress);  // write specifes 0 in top bit, so just address
+  digitalWrite(_slaveSelectPin, LOW);
+  SPI.transfer(regAddress);  // write specifies 0 in top bit, so just address
   SPI.transfer(regValue);
-  digitalWrite(slaveSelectPin, HIGH);
-}
-
-int16_t
-LIS331::SPIreadTwoRegisters(byte regAddress)
-{
-  int16_t twoRegValue = 0;
-
-  digitalWrite(slaveSelectPin, LOW);
-  SPI.transfer(regAddress | 0x80);  // read specifies 1 in top bit
-  twoRegValue = SPI.transfer(0x00);
-  twoRegValue = twoRegValue + (SPI.transfer(0x00) << 8);
-  digitalWrite(slaveSelectPin, HIGH);
-
-  return twoRegValue;
+  digitalWrite(_slaveSelectPin, HIGH);
 }
 
 void
-LIS331::SPIwriteTwoRegisters(byte regAddress, int16_t twoRegValue)
+LIS331::SPIwriteTwoRegisters(const byte regAddress, const int16_t regValue) const
 {
-  byte twoRegValueH = twoRegValue >> 8;
-  byte twoRegValueL = twoRegValue;
+  byte regValueHigh = regValue >> 8;
+  byte regValueLow = regValue;
 
-  digitalWrite(slaveSelectPin, LOW);  // write specifies 0 in top bit
-  SPI.transfer(regAddress);
-  SPI.transfer(twoRegValueL);
-  SPI.transfer(twoRegValueH);
-  digitalWrite(slaveSelectPin, HIGH);
+  digitalWrite(_slaveSelectPin, LOW);
+  SPI.transfer(regAddress);  // write specifies 0 in top bit, so just address
+  SPI.transfer(regValueLow);
+  SPI.transfer(regValueHigh);
+  digitalWrite(_slaveSelectPin, HIGH);
 }
-
