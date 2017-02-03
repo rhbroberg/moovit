@@ -24,7 +24,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 
 void noActivity();
 
-Timer timer(30000, noActivity, true);
+Timer timer(90000, noActivity, true);
 
 void
 suspendSelf()
@@ -60,14 +60,29 @@ noActivity()
   suspendSelf();
 }
 
-volatile bool activitySeen = false;
+volatile uint32_t lastActivity = 0;
+//#include "spark_wiring_system.h"
 
 void
 activity()
 {
-  Serial.print("activity!\n");
-  Serial.flush();
-  activitySeen = true;
+	if (! lastActivity)
+	{
+  		lastActivity = System.ticks();
+	}
+	else
+	{
+	   uint32_t now = System.ticks();
+	   uint32_t duration = (now - lastActivity )/System.ticksPerMicrosecond();
+
+	   if (duration > 100000)
+	   {
+		   Serial.print("activity!\n");
+		   Serial.flush();
+		   lastActivity = 0;
+	   }
+	}
+
   if (timer.isActive())
   {
     timer.resetFromISR();
@@ -81,7 +96,7 @@ monitorAccelerometer()
 {
   myaccelerometer.begin(SS);
 
-// configure interrupt1
+  // configure interrupt1
 
   myaccelerometer.SPIwriteOneRegister(0x22, 0x00);
   myaccelerometer.SPIwriteOneRegister(0x30, 0x00);
@@ -91,16 +106,29 @@ monitorAccelerometer()
   pinMode(D1, INPUT);
   attachInterrupt(D1, activity, RISING);
 
-  myaccelerometer.SPIwriteOneRegister(0x22, 0x04);  // sleep mode latch int1  // 0x04 == latch
-  myaccelerometer.SPIwriteOneRegister(0x30, 0xAA);  // sleep mode 'AND' mode for interrupt
-// AND, 2 threshold, 0 duration, 1hz, ok
-// OR, threshold 14, duration 1, 1hz - too sensitive; but threshold 15 not enuf
-//    myaccelerometer.SPIwriteOneRegister(0x30, 0x2A);  // sleep mode 'OR' mode for interrupt
+  myaccelerometer.SPIwriteOneRegister(0x22, 0x04);  // interrupt mode latch int1  // 0x04 == latch
+  myaccelerometer.SPIwriteOneRegister(0x21, 0x1F);  // interrupt mode hpf
+#define AND_ACCELEROMETER
+#ifdef AND_ACCELEROMETER
+  // AND, 2 threshold, 0 duration, 1hz, ok
+  myaccelerometer.SPIwriteOneRegister(0x30, 0xAA);  // interrupt mode 'AND' mode
+//  myaccelerometer.SPIwriteOneRegister(0x32, 0x06);  // interrupt mode threshold
+  myaccelerometer.SPIwriteOneRegister(0x32, 0x02);  // interrupt mode threshold
+  myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
+#else
+#ifdef OR_ACCELEROMETER
+  // OR, threshold 14, duration 1, 1hz - too sensitive; but threshold 15 not enuf
+  myaccelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
+  myaccelerometer.SPIwriteOneRegister(0x32, 0x15);  // interrupt mode threshold
+    myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
+#else
+  myaccelerometer.SPIwriteOneRegister(0x30, 0x7F);  // interrupt mode movement mode
+//  myaccelerometer.SPIwriteOneRegister(0x30, 0xEA);  // interrupt mode position mode
+  myaccelerometer.SPIwriteOneRegister(0x32, 0x00);  // interrupt mode threshold
+  myaccelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
+#endif
+#endif
 
-  myaccelerometer.SPIwriteOneRegister(0x32, 0x02);  // sleep mode threshold
-  myaccelerometer.SPIwriteOneRegister(0x33, 0x00);  // sleep mode duration
-
-//  timer = Timer(5000, noActivity);
 }
 
 void setup() {
@@ -109,6 +137,7 @@ void setup() {
   // (That means that we will be sending voltage to them, rather than monitoring voltage that comes from them)
 
   // It's important you do this here, inside the setup() function rather than outside it or in the loop function.
+  // Serial.begin(115200);
 
   pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
@@ -120,6 +149,7 @@ void setup() {
 
   Serial.print("done with setup\n");
   monitorAccelerometer();
+  myaccelerometer.checkAllControlRegs();
 }
 
 // Next we have the loop function, the other essential part of a microcontroller program.
@@ -142,10 +172,8 @@ void loop() {
 #endif
 
   int16_t XData, YData, ZData;
-//  myaccelerometer.checkAllControlRegs();
   myaccelerometer.readXYZData(XData, YData, ZData);
   Serial.printf("data: %d %d %d\n", XData, YData, ZData);
-  //myaccelerometer.SPIreadOneRegister(0x31);
 
   // Wait 1 second...
   delay(1000);
