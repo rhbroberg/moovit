@@ -28,7 +28,7 @@ LIS331::begin(int16_t chipSelectPin)
   delay(100);
   SPIwriteOneRegister(0x21, 0x00);  // hp filter off
   delay(100);
-//  SPIwriteOneRegister(0x23, 0x30);  // 24g
+  //  SPIwriteOneRegister(0x23, 0x30);  // 24g
   SPIwriteOneRegister(0x23, 0x00);  // 6g
   delay(100);
 

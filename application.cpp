@@ -25,7 +25,7 @@ void noActivity();
 void
 turnLEDOff()
 {
-	digitalWrite(led2, LOW);
+  digitalWrite(led2, LOW);
 }
 
 Timer timer(10000, noActivity, true);
@@ -34,30 +34,30 @@ Timer blinker(10, turnLEDOff, true);
 void
 suspendSelf()
 {
-	Serial.printf("see ya\n");
-	Serial.flush();
-	detachInterrupt(D1);
-	timer.stop();
+  Serial.printf("see ya\n");
+  Serial.flush();
+  detachInterrupt(D1);
+  timer.stop();
 
-	myaccelerometer.SPIreadOneRegister(0x31);
-	myaccelerometer.SPIwriteOneRegister(0x20, 0xB7);  // sleep mode, 1 Hz low 0x57(0.5Hz) vs 0xB7 (5Hz)
+  myaccelerometer.SPIreadOneRegister(0x31);
+  myaccelerometer.SPIwriteOneRegister(0x20, 0xB7);  // sleep mode, 1 Hz low 0x57(0.5Hz) vs 0xB7 (5Hz)
 
-	myaccelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
-	myaccelerometer.SPIwriteOneRegister(0x32, 0x04);  // interrupt mode threshold
-	myaccelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
+  myaccelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
+  myaccelerometer.SPIwriteOneRegister(0x32, 0x04);  // interrupt mode threshold
+  myaccelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
 
 #define DEEP_IS_BETTER
 #ifdef DEEP_IS_BETTER
-	System.sleep(SLEEP_MODE_DEEP, 60);
+  System.sleep(SLEEP_MODE_DEEP, 60);
 #else
-	System.sleep(D1,RISING);
+  System.sleep(D1,RISING);
 
 #ifdef NO_ISR_AFTER_SLEEP
-	myaccelerometer.SPIwriteOneRegister(0x30, 0x00);  // clear interrupt axes
-	myaccelerometer.SPIwriteOneRegister(0x20, 0x37);  // regular again
+  myaccelerometer.SPIwriteOneRegister(0x30, 0x00);  // clear interrupt axes
+  myaccelerometer.SPIwriteOneRegister(0x20, 0x37);  // regular again
 #endif
 
-	monitorAccelerometer();
+  monitorAccelerometer();
 
 #endif
 }
@@ -74,36 +74,36 @@ volatile uint32_t lastActivity = 0;
 void
 activity()
 {
-	if (! lastActivity)
-	{
-  		lastActivity = System.ticks();
-	}
-	else
-	{
-	   uint32_t now = System.ticks();
-	   uint32_t duration = (now - lastActivity )/System.ticksPerMicrosecond();
+  if (! lastActivity)
+  {
+    lastActivity = System.ticks();
+  }
+  else
+  {
+    uint32_t now = System.ticks();
+    uint32_t duration = (now - lastActivity )/System.ticksPerMicrosecond();
 
-	   if (duration > 100000)
-	   {
-		   Serial.print("activity!\n");
-		   //Serial.flush();
-		   lastActivity = 0;
-	   }
-	}
+    if (duration > 100000)
+    {
+      Serial.print("activity!\n");
+      //Serial.flush();
+      lastActivity = 0;
+    }
+  }
 
   digitalWrite(led2, HIGH);
   if (blinker.isActive())
   {
-	  blinker.resetFromISR();
+    blinker.resetFromISR();
   }
   else
   {
-	  blinker.startFromISR();
+    blinker.startFromISR();
   }
 
   if (timer.isActive())
   {
-	  timer.resetFromISR();
+    timer.resetFromISR();
   }
   // clear edge
   myaccelerometer.SPIreadOneRegister(0x31);
@@ -130,7 +130,7 @@ monitorAccelerometer()
 #ifdef AND_ACCELEROMETER
   // AND, 2 threshold, 0 duration, 1hz, ok
   myaccelerometer.SPIwriteOneRegister(0x30, 0xAA);  // interrupt mode 'AND' mode
-//  myaccelerometer.SPIwriteOneRegister(0x32, 0x06);  // interrupt mode threshold
+  //  myaccelerometer.SPIwriteOneRegister(0x32, 0x06);  // interrupt mode threshold
   myaccelerometer.SPIwriteOneRegister(0x32, 0x02);  // interrupt mode threshold
   myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
 #else
@@ -138,10 +138,10 @@ monitorAccelerometer()
   // OR, threshold 14, duration 1, 1hz - too sensitive; but threshold 15 not enuf
   myaccelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
   myaccelerometer.SPIwriteOneRegister(0x32, 0x15);  // interrupt mode threshold
-    myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
+  myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
 #else
   myaccelerometer.SPIwriteOneRegister(0x30, 0x7F);  // interrupt mode movement mode
-//  myaccelerometer.SPIwriteOneRegister(0x30, 0xEA);  // interrupt mode position mode
+  //  myaccelerometer.SPIwriteOneRegister(0x30, 0xEA);  // interrupt mode position mode
   myaccelerometer.SPIwriteOneRegister(0x32, 0x00);  // interrupt mode threshold
   myaccelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
 #endif
@@ -152,17 +152,17 @@ monitorAccelerometer()
 void
 lowPowerMode()
 {
-    RCC_PCLK1Config(RCC_HCLK_Div1);
-    RCC_PCLK2Config(RCC_HCLK_Div1);
-    RCC_HCLKConfig(RCC_SYSCLK_Div64);
+  RCC_PCLK1Config(RCC_HCLK_Div1);
+  RCC_PCLK2Config(RCC_HCLK_Div1);
+  RCC_HCLKConfig(RCC_SYSCLK_Div64);
 
-    SystemCoreClockUpdate();
-    SysTick_Configuration();
+  SystemCoreClockUpdate();
+  SysTick_Configuration();
 
-    RGB.control(true);
-    RGB.color(0, 0, 0);
+  RGB.control(true);
+  RGB.color(0, 0, 0);
 
-    FLASH->ACR &= ~FLASH_ACR_PRFTEN;
+  FLASH->ACR &= ~FLASH_ACR_PRFTEN;
 }
 
 void setup() {
