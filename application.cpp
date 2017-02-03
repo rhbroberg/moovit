@@ -5,9 +5,6 @@
 // First, we're going to make some variables.
 // This is our "shorthand" that we'll use throughout the program:
 
-int led1 = D0; // Instead of writing D0 over and over again, we'll write led1
-// You'll need to wire an LED to this one to see it blink.
-
 int led2 = D7; // Instead of writing D7 over and over again, we'll write led2
 // This one is the little blue LED on your board. On the Photon it is next to D7, and on the Core it is next to the USB jack.
 
@@ -18,13 +15,21 @@ int led2 = D7; // Instead of writing D7 over and over again, we'll write led2
 LIS331 myaccelerometer;
 
 // during development, leave radio on for OTA
+//#define MINIMAL_POWER_USE
 #ifdef MINIMAL_POWER_USE
 SYSTEM_MODE(SEMI_AUTOMATIC);
 #endif
 
 void noActivity();
 
-Timer timer(90000, noActivity, true);
+void
+turnLEDOff()
+{
+	digitalWrite(led2, LOW);
+}
+
+Timer timer(10000, noActivity, true);
+Timer blinker(10, turnLEDOff, true);
 
 void
 suspendSelf()
@@ -35,7 +40,11 @@ suspendSelf()
 	timer.stop();
 
 	myaccelerometer.SPIreadOneRegister(0x31);
-	myaccelerometer.SPIwriteOneRegister(0x20, 0x57);  // sleep mode, 1 Hz low
+	myaccelerometer.SPIwriteOneRegister(0x20, 0xB7);  // sleep mode, 1 Hz low 0x57(0.5Hz) vs 0xB7 (5Hz)
+
+	myaccelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
+	myaccelerometer.SPIwriteOneRegister(0x32, 0x04);  // interrupt mode threshold
+	myaccelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
 
 #define DEEP_IS_BETTER
 #ifdef DEEP_IS_BETTER
@@ -61,7 +70,6 @@ noActivity()
 }
 
 volatile uint32_t lastActivity = 0;
-//#include "spark_wiring_system.h"
 
 void
 activity()
@@ -78,14 +86,24 @@ activity()
 	   if (duration > 100000)
 	   {
 		   Serial.print("activity!\n");
-		   Serial.flush();
+		   //Serial.flush();
 		   lastActivity = 0;
 	   }
 	}
 
+  digitalWrite(led2, HIGH);
+  if (blinker.isActive())
+  {
+	  blinker.resetFromISR();
+  }
+  else
+  {
+	  blinker.startFromISR();
+  }
+
   if (timer.isActive())
   {
-    timer.resetFromISR();
+	  timer.resetFromISR();
   }
   // clear edge
   myaccelerometer.SPIreadOneRegister(0x31);
@@ -131,6 +149,22 @@ monitorAccelerometer()
 
 }
 
+void
+lowPowerMode()
+{
+    RCC_PCLK1Config(RCC_HCLK_Div1);
+    RCC_PCLK2Config(RCC_HCLK_Div1);
+    RCC_HCLKConfig(RCC_SYSCLK_Div64);
+
+    SystemCoreClockUpdate();
+    SysTick_Configuration();
+
+    RGB.control(true);
+    RGB.color(0, 0, 0);
+
+    FLASH->ACR &= ~FLASH_ACR_PRFTEN;
+}
+
 void setup() {
 
   // We are going to tell our device that D0 and D7 (which we named led1 and led2 respectively) are going to be output
@@ -139,7 +173,6 @@ void setup() {
   // It's important you do this here, inside the setup() function rather than outside it or in the loop function.
   // Serial.begin(115200);
 
-  pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
 
   // disable on-board RGB LED on Photon/Electron
@@ -150,6 +183,10 @@ void setup() {
   Serial.print("done with setup\n");
   monitorAccelerometer();
   myaccelerometer.checkAllControlRegs();
+
+#ifdef MINIMAL_POWER_USE
+  lowPowerMode();
+#endif
 }
 
 // Next we have the loop function, the other essential part of a microcontroller program.
@@ -157,20 +194,6 @@ void setup() {
 // Note: Code that blocks for too long (like more than 5 seconds), can make weird things happen (like dropping the network connection).  The built-in delay function shown below safely interleaves required background activity, so arbitrarily long delays can safely be done if you need them.
 
 void loop() {
-#define BLINKY
-#ifdef BLINKY
-  // To blink the LED, first we'll turn it on...
-  digitalWrite(led1, HIGH);
-  digitalWrite(led2, HIGH);
-
-  // We'll leave it on for 1 second...
-  delay(1000);
-
-  // Then we'll turn it off...
-  digitalWrite(led1, LOW);
-  digitalWrite(led2, LOW);
-#endif
-
   int16_t XData, YData, ZData;
   myaccelerometer.readXYZData(XData, YData, ZData);
   Serial.printf("data: %d %d %d\n", XData, YData, ZData);
