@@ -481,6 +481,5 @@ void loop() {
   if ((++i % 5) == 0)
   {
   }
-  // And repeat!
 }
 
