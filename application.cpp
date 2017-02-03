@@ -477,9 +477,5 @@ void loop() {
 
   // Wait 1 second...
   delay(1000);
-
-  if ((++i % 5) == 0)
-  {
-  }
 }
 
