@@ -12,15 +12,20 @@ int led2 = D7; // Instead of writing D7 over and over again, we'll write led2
 // The setup function is a standard part of any microcontroller program.
 // It runs only once when the device boots up or is reset.
 
-LIS331 myaccelerometer;
+void noActivity();
+void monitorAccelerometer();
+void turnLEDOff();
+
+LIS331 accelerometer;
+volatile uint32_t lastActivity = 0;
+Timer timer(10000, noActivity, true);
+Timer blinker(10, turnLEDOff, true);
 
 // during development, leave radio on for OTA
-//#define MINIMAL_POWER_USE
+// #define MINIMAL_POWER_USE
 #ifdef MINIMAL_POWER_USE
 SYSTEM_MODE(SEMI_AUTOMATIC);
 #endif
-
-void noActivity();
 
 void
 turnLEDOff()
@@ -28,23 +33,15 @@ turnLEDOff()
   digitalWrite(led2, LOW);
 }
 
-Timer timer(10000, noActivity, true);
-Timer blinker(10, turnLEDOff, true);
-
 void
 suspendSelf()
 {
   Serial.printf("see ya\n");
   Serial.flush();
-  detachInterrupt(D1);
+  detachInterrupt(D1);	// interrupt also wired to WKUP pin
   timer.stop();
 
-  myaccelerometer.SPIreadOneRegister(0x31);
-  myaccelerometer.SPIwriteOneRegister(0x20, 0xB7);  // sleep mode, 1 Hz low 0x57(0.5Hz) vs 0xB7 (5Hz)
-
-  myaccelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
-  myaccelerometer.SPIwriteOneRegister(0x32, 0x04);  // interrupt mode threshold
-  myaccelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
+  accelerometer.sleepMode(5, 0x5, 0x0, LIS331::interrupt1, 0x2A);
 
 #define DEEP_IS_BETTER
 #ifdef DEEP_IS_BETTER
@@ -53,8 +50,8 @@ suspendSelf()
   System.sleep(D1,RISING);
 
 #ifdef NO_ISR_AFTER_SLEEP
-  myaccelerometer.SPIwriteOneRegister(0x30, 0x00);  // clear interrupt axes
-  myaccelerometer.SPIwriteOneRegister(0x20, 0x37);  // regular again
+  accelerometer.SPIwriteOneRegister(0x30, 0x00);  // clear interrupt axes
+  accelerometer.SPIwriteOneRegister(0x20, 0x37);  // regular again
 #endif
 
   monitorAccelerometer();
@@ -65,32 +62,34 @@ suspendSelf()
 void
 noActivity()
 {
-  Serial.print("looks like no more activity\n");
+  Serial.print("looks like no more motionDetected\n");
   suspendSelf();
 }
 
-volatile uint32_t lastActivity = 0;
+void
+logEvery(const uint32_t dutyCycle)
+{
+ if (! lastActivity)
+ {
+   lastActivity = System.ticks();
+ }
+ else
+ {
+   uint32_t now = System.ticks();
+   uint32_t duration = (now - lastActivity )/System.ticksPerMicrosecond();
+
+   if (duration > dutyCycle)
+   {
+     Serial.print("activity!\n");
+     //Serial.flush();
+     lastActivity = 0;
+   }
+ }
+}
 
 void
-activity()
+blinkNotify()
 {
-  if (! lastActivity)
-  {
-    lastActivity = System.ticks();
-  }
-  else
-  {
-    uint32_t now = System.ticks();
-    uint32_t duration = (now - lastActivity )/System.ticksPerMicrosecond();
-
-    if (duration > 100000)
-    {
-      Serial.print("activity!\n");
-      //Serial.flush();
-      lastActivity = 0;
-    }
-  }
-
   digitalWrite(led2, HIGH);
   if (blinker.isActive())
   {
@@ -105,48 +104,60 @@ activity()
   {
     timer.resetFromISR();
   }
-  // clear edge
-  myaccelerometer.SPIreadOneRegister(0x31);
+}
+
+void
+motionDetected()
+{
+  logEvery(100000);
+  blinkNotify();
+  // clear edge, else ISR won't trigger again
+  accelerometer.clearInterruptLatch(LIS331::interrupt1);
 }
 
 void
 monitorAccelerometer()
 {
-  myaccelerometer.begin(SS);
+  pinMode(D1, INPUT);
+  timer.start();
+  accelerometer.begin(SS);
+  accelerometer.activityInterrupt(0x2, 0x01, LIS331::interrupt1, 0xAA);
+  attachInterrupt(D1, motionDetected, RISING);
 
+#ifdef NOT_MY_LIBE
   // configure interrupt1
 
-  myaccelerometer.SPIwriteOneRegister(0x22, 0x00);
-  myaccelerometer.SPIwriteOneRegister(0x30, 0x00);
-  myaccelerometer.SPIreadOneRegister(0x31);
+  accelerometer.SPIwriteOneRegister(0x22, 0x00);
+  accelerometer.SPIwriteOneRegister(0x30, 0x00);
+  accelerometer.SPIreadOneRegister(0x31);
 
-  timer.start();
   pinMode(D1, INPUT);
-  attachInterrupt(D1, activity, RISING);
+  timer.start();
+  attachInterrupt(D1, motionDetected, RISING);
 
   myaccelerometer.SPIwriteOneRegister(0x22, 0x04);  // interrupt mode latch int1  // 0x04 == latch
-  myaccelerometer.SPIwriteOneRegister(0x21, 0x1F);  // interrupt mode hpf
+  accelerometer.SPIwriteOneRegister(0x21, 0x1F);  // interrupt mode hpf
 #define AND_ACCELEROMETER
 #ifdef AND_ACCELEROMETER
   // AND, 2 threshold, 0 duration, 1hz, ok
-  myaccelerometer.SPIwriteOneRegister(0x30, 0xAA);  // interrupt mode 'AND' mode
-  //  myaccelerometer.SPIwriteOneRegister(0x32, 0x06);  // interrupt mode threshold
-  myaccelerometer.SPIwriteOneRegister(0x32, 0x02);  // interrupt mode threshold
+  accelerometer.SPIwriteOneRegister(0x30, 0xAA);  // interrupt mode 'AND' mode
+  //  accelerometer.SPIwriteOneRegister(0x32, 0x06);  // interrupt mode threshold
+  accelerometer.SPIwriteOneRegister(0x32, 0x02);  // interrupt mode threshold
   myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
 #else
 #ifdef OR_ACCELEROMETER
   // OR, threshold 14, duration 1, 1hz - too sensitive; but threshold 15 not enuf
-  myaccelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
-  myaccelerometer.SPIwriteOneRegister(0x32, 0x15);  // interrupt mode threshold
+  accelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
+  accelerometer.SPIwriteOneRegister(0x32, 0x15);  // interrupt mode threshold
   myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
 #else
-  myaccelerometer.SPIwriteOneRegister(0x30, 0x7F);  // interrupt mode movement mode
-  //  myaccelerometer.SPIwriteOneRegister(0x30, 0xEA);  // interrupt mode position mode
-  myaccelerometer.SPIwriteOneRegister(0x32, 0x00);  // interrupt mode threshold
-  myaccelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
+  accelerometer.SPIwriteOneRegister(0x30, 0x7F);  // interrupt mode movement mode
+  //  accelerometer.SPIwriteOneRegister(0x30, 0xEA);  // interrupt mode position mode
+  accelerometer.SPIwriteOneRegister(0x32, 0x00);  // interrupt mode threshold
+  accelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
 #endif
 #endif
-
+#endif
 }
 
 void
@@ -165,7 +176,8 @@ lowPowerMode()
   FLASH->ACR &= ~FLASH_ACR_PRFTEN;
 }
 
-void setup() {
+void
+setup() {
 
   // We are going to tell our device that D0 and D7 (which we named led1 and led2 respectively) are going to be output
   // (That means that we will be sending voltage to them, rather than monitoring voltage that comes from them)
@@ -182,7 +194,7 @@ void setup() {
 
   Serial.print("done with setup\n");
   monitorAccelerometer();
-  myaccelerometer.logControlRegs();
+  accelerometer.logControlRegs();
 
 #ifdef MINIMAL_POWER_USE
   lowPowerMode();
@@ -191,11 +203,11 @@ void setup() {
 
 // Next we have the loop function, the other essential part of a microcontroller program.
 // This routine gets repeated over and over, as quickly as possible and as many times as possible, after the setup function is called.
-// Note: Code that blocks for too long (like more than 5 seconds), can make weird things happen (like dropping the network connection).  The built-in delay function shown below safely interleaves required background activity, so arbitrarily long delays can safely be done if you need them.
+// Note: Code that blocks for too long (like more than 5 seconds), can make weird things happen (like dropping the network connection).  The built-in delay function shown below safely interleaves required background motionDetected, so arbitrarily long delays can safely be done if you need them.
 
 void loop() {
   int16_t XData, YData, ZData;
-  myaccelerometer.readXYZData(XData, YData, ZData);
+  accelerometer.readXYZData(XData, YData, ZData);
   Serial.printf("data: %d %d %d\n", XData, YData, ZData);
 
   // Wait 1 second...

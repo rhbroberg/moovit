@@ -3,9 +3,29 @@
 // #define LIS331_DEBUG 1
 
 #define SCALE 0.0007324  //sets g-level (48 fullscale range)/(2^16bits) = SCALE
-#define OUT_X	0x28
-#define OUT_Y	0x2A
-#define OUT_Z	0x2C
+
+#define CTRL_REG1	0x20
+#define CTRL_REG2	0x21
+#define CTRL_REG3	0x22
+#define CTRL_REG4	0x23
+#define CTRL_REG5	0x24
+#define HP_FILTER_RESET	0x25
+#define REFERENCE	0x26
+#define STATUS_REG	0x27
+#define OUT_X_L		0x28
+#define OUT_X_H		0x29
+#define OUT_Y_L		0x2A
+#define OUT_Y_H		0x2B
+#define OUT_Z_L		0x2C
+#define OUT_Z_H		0x2D
+#define INT1_CFG	0x30
+#define INT1_SOURCE	0x31
+#define INT1_THS	0x32
+#define INT1_DURATION	0x33
+#define INT2_CFG	0x34
+#define INT2_SOURCE	0x35
+#define INT2_THS	0x36
+#define INT2_DURATION	0x37
 
 LIS331::LIS331()
 : _slaveSelectPin(SS)
@@ -17,33 +37,24 @@ LIS331::LIS331()
 //  Initial SPI setup, soft reset of device
 //
 void
-LIS331::begin(int16_t chipSelectPin)
+LIS331::begin(const int16_t chipSelectPin, const gScale g)
 {
   _slaveSelectPin = chipSelectPin;
   pinMode(_slaveSelectPin, OUTPUT);
   SPI.begin();
   SPI.setDataMode(SPI_MODE0);	//CPHA = CPOL = 0    MODE = 0
   SPI.setBitOrder(MSBFIRST);
-//  delay(1000);
 
-  // soft reset
-  SPIwriteOneRegister(0x20, 0x37);  // normal mode, xyz-enabled
-  //delay(100);
-  SPIwriteOneRegister(0x21, 0x00);  // hp filter off
-  //delay(100);
-  //  SPIwriteOneRegister(0x23, 0x30);  // 24g
-  SPIwriteOneRegister(0x23, 0x00);  // 6g
-  //delay(100);
-
-#ifdef LIS331_DEBUG
-  Serial.println("begin\n");
-#endif
+  SPIwriteOneRegister(CTRL_REG1, 0x37);  // normal mode, xyz-enabled
+  SPIwriteOneRegister(CTRL_REG2, 0x00);  // hp filter off
+  //  SPIwriteOneRegister(CTRL_REG4, 0x30);  // 24g
+  SPIwriteOneRegister(CTRL_REG4, 0x00);  // 6g
 }
 
 const int16_t
 LIS331::readXData() const
 {
-  int16_t XregValue = SPIreadTwoRegisters(OUT_X);
+  int16_t XregValue = SPIreadTwoRegisters(OUT_X_L);
 
 #ifdef LIS331_DEBUG
   Serial.print("XregValue = ");
@@ -56,7 +67,7 @@ LIS331::readXData() const
 const int16_t
 LIS331::readYData() const
 {
-  int16_t YregValue = SPIreadTwoRegisters(OUT_Y);
+  int16_t YregValue = SPIreadTwoRegisters(OUT_Y_L);
 
 #ifdef LIS331_DEBUG
   Serial.print("\tYregValue = ");
@@ -69,7 +80,7 @@ LIS331::readYData() const
 const int16_t
 LIS331::readZData() const
 {
-  int16_t ZregValue = SPIreadTwoRegisters(OUT_Z);
+  int16_t ZregValue = SPIreadTwoRegisters(OUT_Z_L);
 
 #ifdef LIS331_DEBUG
   Serial.print("\tZregValue = ");
@@ -85,7 +96,7 @@ LIS331::readXYZData(int16_t &XregValue, int16_t &YregValue, int16_t &ZregValue) 
   // burst SPI read
   // A burst read of all three axis is required to guarantee all measurements correspond to same sample time
   digitalWrite(_slaveSelectPin, LOW);
-  SPI.transfer(0x80 | 0x40 | 0x28);  // read consecutive starting at 0x28
+  SPI.transfer(0x80 | 0x40 | OUT_X_L);  // read consecutive starting at low byte of x register
   XregValue = SPI.transfer(0x00);
   XregValue = XregValue + (SPI.transfer(0x00) << 8);
 
@@ -105,83 +116,58 @@ LIS331::readXYZData(int16_t &XregValue, int16_t &YregValue, int16_t &ZregValue) 
 }
 
 void
-LIS331::setupDCActivityInterrupt(int16_t threshold, byte time)
+LIS331::activityInterrupt(const byte threshold, const byte duration, const LIS331::pin which, const byte mode)
 {
-  //  Setup motion and time thresholds
-  SPIwriteTwoRegisters(0x20, threshold);
-  SPIwriteOneRegister(0x22, time);
+  // disable, configure parameters, attach interrupt, enable
 
-  // turn on activity interrupt
-  byte ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);  // Read current reg value
-  ACT_INACT_CTL_Reg = ACT_INACT_CTL_Reg | (0x01);     // turn on bit 1, ACT_EN
-  SPIwriteOneRegister(0x27, ACT_INACT_CTL_Reg);       // Write new reg value
-  ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);       // Verify properly written
+  disableInterrupt(which);
+  SPIwriteOneRegister(0x22, 0x00);	// disable latch, int1
+  clearInterruptLatch(which);
 
-#ifdef LIS331_DEBUG
-  Serial.print("DC Activity Threshold set to ");  	Serial.print(SPIreadTwoRegisters(0x20));
-  Serial.print(", Time threshold set to ");  		Serial.print(SPIreadOneRegister(0x22));
-  Serial.print(", ACT_INACT_CTL Register is ");  	Serial.println(ACT_INACT_CTL_Reg, HEX);
-#endif
+  // AND, 2 threshold, 0 duration, 1hz, ok
+  SPIwriteOneRegister(0x32, 0x02);  // interrupt mode threshold
+  SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
+  SPIwriteOneRegister(0x22, 0x04);  // interrupt mode latch int1
+  SPIwriteOneRegister(0x21, 0x1F);  // interrupt mode hpf
+
+  enableInterrupt(which);;
 }
 
 void
-LIS331::setupACActivityInterrupt(int16_t threshold, byte time)
+LIS331::inactivityInterrupt(const byte threshold, const byte duration, const pin which, const byte mode)
 {
-  //  Setup motion and time thresholds
-  SPIwriteTwoRegisters(0x20, threshold);
-  SPIwriteOneRegister(0x22, time);
-
-  // turn on activity interrupt
-  byte ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);  // Read current reg value
-  ACT_INACT_CTL_Reg = ACT_INACT_CTL_Reg | (0x03);     // turn on bit 2 and 1, ACT_AC_DCB, ACT_EN
-  SPIwriteOneRegister(0x27, ACT_INACT_CTL_Reg);       // Write new reg value
-  ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);       // Verify properly written
-
-#ifdef LIS331_DEBUG
-  Serial.print("AC Activity Threshold set to ");  	Serial.print(SPIreadTwoRegisters(0x20));
-  Serial.print(", Time Activity set to ");  		Serial.print(SPIreadOneRegister(0x22));
-  Serial.print(", ACT_INACT_CTL Register is ");  Serial.println(ACT_INACT_CTL_Reg, HEX);
-#endif
+//  _inActivityHandler[which] = completionHandler;
 }
 
 void
-LIS331::setupDCInactivityInterrupt(int16_t threshold, int16_t time)
+LIS331::disableInterrupt(const pin which)
 {
-  // Setup motion and time thresholds
-  SPIwriteTwoRegisters(0x23, threshold);
-  SPIwriteTwoRegisters(0x25, time);
-
-  // turn on inactivity interrupt
-  byte ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);   // Read current reg value
-  ACT_INACT_CTL_Reg = ACT_INACT_CTL_Reg | (0x04);      // turn on bit 3, INACT_EN
-  SPIwriteOneRegister(0x27, ACT_INACT_CTL_Reg);        // Write new reg value
-  ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);        // Verify properly written
-
-#ifdef LIS331_DEBUG
-  Serial.print("DC Inactivity Threshold set to ");  Serial.print(SPIreadTwoRegisters(0x23));
-  Serial.print(", Time Inactivity set to ");  Serial.print(SPIreadTwoRegisters(0x25));
-  Serial.print(", ACT_INACT_CTL Register is ");  Serial.println(ACT_INACT_CTL_Reg, HEX);
-#endif
+  SPIwriteOneRegister(0x30, 0x00);	// disable interrupts
 }
 
 void
-LIS331::setupACInactivityInterrupt(int16_t threshold, int16_t time)
+LIS331::enableInterrupt(const pin which)
 {
-  //  Setup motion and time thresholds
-  SPIwriteTwoRegisters(0x23, threshold);
-  SPIwriteTwoRegisters(0x25, time);
+  SPIwriteOneRegister(0x30, 0xAA);  // enable interrupt mode 'AND' mode
+}
 
-  // turn on inactivity interrupt
-  byte ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);   // Read current reg value
-  ACT_INACT_CTL_Reg = ACT_INACT_CTL_Reg | (0x0C);      // turn on bit 3 and 4, INACT_AC_DCB, INACT_EN
-  SPIwriteOneRegister(0x27, ACT_INACT_CTL_Reg);        // Write new reg value
-  ACT_INACT_CTL_Reg = SPIreadOneRegister(0x27);        // Verify properly written
+void
+LIS331::clearInterruptLatch(const pin which)
+{
+  SPIreadOneRegister(0x31);  // clear any outstanding latch
+}
 
-#ifdef LIS331_DEBUG
-  Serial.print("AC Inactivity Threshold set to ");  Serial.print(SPIreadTwoRegisters(0x23));
-  Serial.print(", Time Inactivity set to ");  Serial.print(SPIreadTwoRegisters(0x25));
-  Serial.print(", ACT_INACT_CTL Register is ");  Serial.println(ACT_INACT_CTL_Reg, HEX);
-#endif
+
+void
+LIS331::sleepMode(const byte frequency, const byte threshold, const byte duration, const pin which, const byte mode)
+{
+  SPIwriteOneRegister(0x20, 0xB7);  // sleep mode, 1 Hz low 0x57(0.5Hz) vs 0xB7 (5Hz)
+
+  SPIwriteOneRegister(0x32, 0x05);  // interrupt mode threshold
+  SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
+  SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
+
+  clearInterruptLatch(which);	// start fresh
 }
 
 void
@@ -189,7 +175,7 @@ LIS331::logControlRegs()
 {
   digitalWrite(_slaveSelectPin, LOW);
   SPI.transfer(0x80 | 0x40 | 0x20);  // read consecutive starting at 0x20
-#ifdef LIS331_DEBUG
+
   Serial.println("Start Burst Read of all Control Regs");
   Serial.print("Reg 20 = "); 	Serial.println(SPI.transfer(0x00), HEX);
   Serial.print("Reg 21 = "); 	Serial.println(SPI.transfer(0x00), HEX);
@@ -199,7 +185,7 @@ LIS331::logControlRegs()
   Serial.print("Reg 25 = "); 	Serial.println(SPI.transfer(0x00), HEX);
   Serial.print("Reg 26 = "); 	Serial.println(SPI.transfer(0x00), HEX);
   Serial.print("Reg 27 = "); 	Serial.println(SPI.transfer(0x00), HEX);
-#endif
+
   digitalWrite(_slaveSelectPin, HIGH);
 }
 
