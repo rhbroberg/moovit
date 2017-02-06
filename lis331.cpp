@@ -52,46 +52,38 @@ LIS331::begin(const int16_t chipSelectPin, const gScale g)
 }
 
 const int16_t
-LIS331::readXData() const
+LIS331::location(const byte start, const char axis) const
 {
-  int16_t XregValue = SPIreadTwoRegisters(OUT_X_L);
+  int16_t value = SPIreadTwoRegisters(start);
 
-#ifdef LIS331_DEBUG
-  Serial.print("XregValue = ");
-  Serial.println(XregValue);
-#endif
+  if (Log.isLevelEnabled(LOG_LEVEL_TRACE))
+  {
+    Log.trace("%c: %d", axis, value);
+  }
 
-  return XregValue;
+  return value;
 }
 
 const int16_t
-LIS331::readYData() const
+LIS331::x() const
 {
-  int16_t YregValue = SPIreadTwoRegisters(OUT_Y_L);
-
-#ifdef LIS331_DEBUG
-  Serial.print("\tYregValue = ");
-  Serial.println(YregValue);
-#endif
-
-  return YregValue;
+  return location(OUT_X_L, 'x');
 }
 
 const int16_t
-LIS331::readZData() const
+LIS331::y() const
 {
-  int16_t ZregValue = SPIreadTwoRegisters(OUT_Z_L);
+  return location(OUT_Y_L, 'y');
+}
 
-#ifdef LIS331_DEBUG
-  Serial.print("\tZregValue = ");
-  Serial.println(ZregValue);
-#endif
-
-  return ZregValue;
+const int16_t
+LIS331::z() const
+{
+  return location(OUT_Z_L, 'z');
 }
 
 void
-LIS331::readXYZData(int16_t &XregValue, int16_t &YregValue, int16_t &ZregValue) const
+LIS331::xyz(int16_t &XregValue, int16_t &YregValue, int16_t &ZregValue) const
 {
   // burst SPI read
   // A burst read of all three axis is required to guarantee all measurements correspond to same sample time
@@ -108,12 +100,16 @@ LIS331::readXYZData(int16_t &XregValue, int16_t &YregValue, int16_t &ZregValue) 
 
   digitalWrite(_slaveSelectPin, HIGH);
 
-#ifdef LIS331_DEBUG
-  Serial.print("XregValue = "); Serial.print(XregValue);
-  Serial.print("\tYregValue = "); Serial.print(YregValue);
-  Serial.print("\tZregValue = "); Serial.print(ZregValue);
-#endif
+  if (Log.isLevelEnabled(LOG_LEVEL_TRACE))
+  {
+    Log.trace("x: %d; y: %d; z: %d", XregValue, YregValue, ZregValue);
+  }
 }
+
+//accelerometer.SPIwriteOneRegister(0x30, 0x7F);  // interrupt mode movement mode
+////  accelerometer.SPIwriteOneRegister(0x30, 0xEA);  // interrupt mode position mode
+//accelerometer.SPIwriteOneRegister(0x32, 0x00);  // interrupt mode threshold
+//accelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
 
 void
 LIS331::activityInterrupt(const byte threshold, const byte duration, const LIS331::pin which, const byte mode)

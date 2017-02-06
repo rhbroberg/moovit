@@ -1,31 +1,19 @@
 #include "application.h"
 #include "lis331.h"
 
-
-// First, we're going to make some variables.
-// This is our "shorthand" that we'll use throughout the program:
-
-int led2 = D7; // Instead of writing D7 over and over again, we'll write led2
-// This one is the little blue LED on your board. On the Photon it is next to D7, and on the Core it is next to the USB jack.
-
-// Having declared these variables, let's move on to the setup function.
-// The setup function is a standard part of any microcontroller program.
-// It runs only once when the device boots up or is reset.
-
 void noActivity();
 void monitorAccelerometer();
 void turnLEDOff();
 
+SerialLogHandler logHandler(LOG_LEVEL_TRACE);
 LIS331 accelerometer;
 volatile uint32_t lastActivity = 0;
 Timer timer(10000, noActivity, true);
 Timer blinker(10, turnLEDOff, true);
+int led2 = D7; // Instead of writing D7 over and over again, we'll write led2
+bool savePower = false;
 
-// during development, leave radio on for OTA
-// #define MINIMAL_POWER_USE
-#ifdef MINIMAL_POWER_USE
 SYSTEM_MODE(SEMI_AUTOMATIC);
-#endif
 
 void
 turnLEDOff()
@@ -36,7 +24,7 @@ turnLEDOff()
 void
 suspendSelf()
 {
-  Serial.printf("see ya\n");
+  Log.info("see ya\n");
   Serial.flush();
   detachInterrupt(D1);	// interrupt also wired to WKUP pin
   timer.stop();
@@ -53,16 +41,14 @@ suspendSelf()
   accelerometer.SPIwriteOneRegister(0x30, 0x00);  // clear interrupt axes
   accelerometer.SPIwriteOneRegister(0x20, 0x37);  // regular again
 #endif
-
   monitorAccelerometer();
-
 #endif
 }
 
 void
 noActivity()
 {
-  Serial.print("looks like no more motionDetected\n");
+  Log.info("looks like no more motionDetected\n");
   suspendSelf();
 }
 
@@ -80,7 +66,7 @@ logEvery(const uint32_t dutyCycle)
 
    if (duration > dutyCycle)
    {
-     Serial.print("activity!\n");
+     Log.info("activity!\n");
      //Serial.flush();
      lastActivity = 0;
    }
@@ -111,6 +97,11 @@ motionDetected()
 {
   logEvery(100000);
   blinkNotify();
+
+  int16_t XData, YData, ZData;
+  accelerometer.xyz(XData, YData, ZData);
+  Log.info("data: %d %d %d\n", XData, YData, ZData);
+
   // clear edge, else ISR won't trigger again
   accelerometer.clearInterruptLatch(LIS331::interrupt1);
 }
@@ -123,41 +114,6 @@ monitorAccelerometer()
   accelerometer.begin(SS);
   accelerometer.activityInterrupt(0x2, 0x01, LIS331::interrupt1, 0xAA);
   attachInterrupt(D1, motionDetected, RISING);
-
-#ifdef NOT_MY_LIBE
-  // configure interrupt1
-
-  accelerometer.SPIwriteOneRegister(0x22, 0x00);
-  accelerometer.SPIwriteOneRegister(0x30, 0x00);
-  accelerometer.SPIreadOneRegister(0x31);
-
-  pinMode(D1, INPUT);
-  timer.start();
-  attachInterrupt(D1, motionDetected, RISING);
-
-  myaccelerometer.SPIwriteOneRegister(0x22, 0x04);  // interrupt mode latch int1  // 0x04 == latch
-  accelerometer.SPIwriteOneRegister(0x21, 0x1F);  // interrupt mode hpf
-#define AND_ACCELEROMETER
-#ifdef AND_ACCELEROMETER
-  // AND, 2 threshold, 0 duration, 1hz, ok
-  accelerometer.SPIwriteOneRegister(0x30, 0xAA);  // interrupt mode 'AND' mode
-  //  accelerometer.SPIwriteOneRegister(0x32, 0x06);  // interrupt mode threshold
-  accelerometer.SPIwriteOneRegister(0x32, 0x02);  // interrupt mode threshold
-  myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
-#else
-#ifdef OR_ACCELEROMETER
-  // OR, threshold 14, duration 1, 1hz - too sensitive; but threshold 15 not enuf
-  accelerometer.SPIwriteOneRegister(0x30, 0x2A);  // interrupt mode 'OR' mode
-  accelerometer.SPIwriteOneRegister(0x32, 0x15);  // interrupt mode threshold
-  myaccelerometer.SPIwriteOneRegister(0x33, 0x01);  // interrupt mode duration
-#else
-  accelerometer.SPIwriteOneRegister(0x30, 0x7F);  // interrupt mode movement mode
-  //  accelerometer.SPIwriteOneRegister(0x30, 0xEA);  // interrupt mode position mode
-  accelerometer.SPIwriteOneRegister(0x32, 0x00);  // interrupt mode threshold
-  accelerometer.SPIwriteOneRegister(0x33, 0x00);  // interrupt mode duration
-#endif
-#endif
-#endif
 }
 
 void
@@ -177,13 +133,12 @@ lowPowerMode()
 }
 
 void
-setup() {
-
+setup()
+{
   // We are going to tell our device that D0 and D7 (which we named led1 and led2 respectively) are going to be output
   // (That means that we will be sending voltage to them, rather than monitoring voltage that comes from them)
 
-  // It's important you do this here, inside the setup() function rather than outside it or in the loop function.
-  // Serial.begin(115200);
+  Serial.begin(115200);
 
   pinMode(led2, OUTPUT);
 
@@ -192,25 +147,31 @@ setup() {
   pinMode(RGBG, INPUT_PULLUP);
   pinMode(RGBB, INPUT_PULLUP);
 
-  Serial.print("done with setup\n");
   monitorAccelerometer();
   accelerometer.logControlRegs();
 
-#ifdef MINIMAL_POWER_USE
-  lowPowerMode();
-#endif
+  if (savePower)
+  {
+    lowPowerMode();
+  }
+  else
+  {
+    Particle.connect();
+  }
+  Log.info("done with setup");
 }
 
 // Next we have the loop function, the other essential part of a microcontroller program.
 // This routine gets repeated over and over, as quickly as possible and as many times as possible, after the setup function is called.
 // Note: Code that blocks for too long (like more than 5 seconds), can make weird things happen (like dropping the network connection).  The built-in delay function shown below safely interleaves required background motionDetected, so arbitrarily long delays can safely be done if you need them.
 
-void loop() {
+void
+loop()
+{
   int16_t XData, YData, ZData;
-  accelerometer.readXYZData(XData, YData, ZData);
-  Serial.printf("data: %d %d %d\n", XData, YData, ZData);
+  accelerometer.xyz(XData, YData, ZData);
+  Log.info("data: %d %d %d\n", XData, YData, ZData);
 
   // Wait 1 second...
   delay(1000);
 }
-
