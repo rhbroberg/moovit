@@ -1,19 +1,47 @@
 #include "application.h"
 #include "lis331.h"
+#include "NetworkRingBuffer.h"
 
 void noActivity();
 void monitorAccelerometer();
 void turnLEDOff();
+void stopStreaming();
+void sampleMe();
 
-SerialLogHandler logHandler(LOG_LEVEL_TRACE);
+NetworkRingBuffer entries(1024);
+SerialLogHandler logHandler(LOG_LEVEL_INFO);
+//SerialLogHandler logHandler(LOG_LEVEL_TRACE);
 LIS331 accelerometer;
 volatile uint32_t lastActivity = 0;
-Timer timer(10000, noActivity, true);
+Timer timer(9930000, noActivity, true);
 Timer blinker(10, turnLEDOff, true);
+Timer streamData(3000, stopStreaming, true);
+Timer streamIt(10, sampleMe, false);
+
 int led2 = D7; // Instead of writing D7 over and over again, we'll write led2
 bool savePower = false;
 
+SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
+
+void
+sampleMe()
+{
+  static MotionEntry measurement;
+
+  accelerometer.xyz(measurement._x, measurement._y, measurement._z);
+  measurement._time = Time.now();
+  measurement._mode = 's';
+
+  entries.fill(measurement);
+}
+
+void
+stopStreaming()
+{
+  streamIt.stopFromISR();
+  Log.info("done streaming");
+}
 
 void
 turnLEDOff()
@@ -66,7 +94,7 @@ logEvery(const uint32_t dutyCycle)
 
    if (duration > dutyCycle)
    {
-     Log.info("activity!\n");
+     Log.info("activity!");
      //Serial.flush();
      lastActivity = 0;
    }
@@ -100,7 +128,20 @@ motionDetected()
 
   int16_t XData, YData, ZData;
   accelerometer.xyz(XData, YData, ZData);
-  Log.info("data: %d %d %d\n", XData, YData, ZData);
+  Log.trace("data: %d %d %d", XData, YData, ZData);
+
+  MotionEntry measurement(Time.now(), 'i', XData, YData, ZData);
+  entries.fill(measurement);
+
+  if (streamData.isActive())
+  {
+    streamData.resetFromISR();
+  }
+  else
+  {
+    streamData.startFromISR();
+  }
+  streamIt.resetFromISR();
 
   // clear edge, else ISR won't trigger again
   accelerometer.clearInterruptLatch(LIS331::interrupt1);
@@ -168,10 +209,29 @@ setup()
 void
 loop()
 {
+#ifdef NO_MORE
   int16_t XData, YData, ZData;
   accelerometer.xyz(XData, YData, ZData);
-  Log.info("data: %d %d %d\n", XData, YData, ZData);
+  Log.info("data: %d %d %d", XData, YData, ZData);
+#endif
+  //Log.info("memory: %ld", System.freeMemory());
 
-  // Wait 1 second...
+  // reset RTC if in low power mode and haven't connected to Particle yet
+  if (savePower)
+  {
+    if (!Particle.connected() && (Time.year() == 1970))
+    {
+      Log.info("RTC not set; connecting up to set it");
+      Particle.connect();
+    }
+
+    if (Particle.connected() && Time.year() != 1970)
+    {
+      Log.info("RTC now set; disconnecting from Particle");
+      Particle.disconnect();
+    }
+  }
+
   delay(1000);
+  entries.empty(256);
 }
