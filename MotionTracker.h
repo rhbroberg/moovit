@@ -21,6 +21,11 @@ public:
   // probably need methods to tweak timeouts
 
 protected:
+  int setTimer(String command, Timer &timer, String name);
+  int setSleepTime(String);
+  int setIntervalTime(String);
+  int setStreamingTime(String);
+
   void blinkNotify();
   void logEvery(const uint32_t);
   void monitorAccelerometer();

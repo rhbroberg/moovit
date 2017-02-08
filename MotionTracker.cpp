@@ -33,6 +33,51 @@ MotionTracker::begin()
 
   monitorAccelerometer();
   accelerometer.logControlRegs();
+
+  Particle.function("sleep-time", &MotionTracker::setSleepTime, this);
+  Particle.function("interval", &MotionTracker::setIntervalTime, this);
+  Particle.function("streaming", &MotionTracker::setStreamingTime, this);
+}
+
+int
+MotionTracker::setSleepTime(String command)
+{
+  return setTimer(command, _sleepTimer, "sleep");
+}
+
+int
+MotionTracker::setIntervalTime(String command)
+{
+  return setTimer(command, _streamIntervalTimer, "stream-interval");
+}
+
+int
+MotionTracker::setStreamingTime(String command)
+{
+  return setTimer(command, _streamingTimer, "streaming");
+}
+
+int
+MotionTracker::setTimer(String command, Timer &timer, String name)
+{
+  int delay;
+
+  Log.info("received new timer value '%s' for timer %s", command.c_str(), name.c_str());
+  if (sscanf(command, "%d", &delay) != 1)
+  {
+    Log.warn("could not parse int from %s", command.c_str());
+    return 0;
+  }
+  Log.info("new %s timer is %d", name.c_str(), delay);
+  bool wasActive = timer.isActive();
+  timer.changePeriod(delay);
+  // leave timer in same running state as it was originally; .changePeriod() causes it to start
+  if (!wasActive)
+  {
+    timer.stop();
+  }
+
+  return 1;
 }
 
 void
@@ -66,7 +111,7 @@ MotionTracker::turnLEDOff()
 void
 MotionTracker::suspendSelf()
 {
-  Log.info("see ya\n");
+  Log.info("going to sleep now");
   Serial.flush();
   detachInterrupt(D1);	// interrupt also wired to WKUP pin
   _sleepTimer.stop();
@@ -90,7 +135,7 @@ MotionTracker::suspendSelf()
 void
 MotionTracker::noActivity()
 {
-  Log.info("looks like no more motionDetected\n");
+  Log.info("looks like no more motion detected\n");
   suspendSelf();
 }
 
@@ -119,14 +164,7 @@ void
 MotionTracker::blinkNotify()
 {
   digitalWrite(_boardLED, HIGH);
-  if (_blinkTimer.isActive())
-  {
-    _blinkTimer.resetFromISR();
-  }
-  else
-  {
-    _blinkTimer.startFromISR();
-  }
+  _blinkTimer.resetFromISR();
 }
 
 void
@@ -135,26 +173,14 @@ MotionTracker::motionDetected()
   logEvery(100000);
   blinkNotify();
 
-  if (_sleepTimer.isActive())
-  {
-    _sleepTimer.resetFromISR();
-  }
-
   int16_t XData, YData, ZData;
   accelerometer.xyz(XData, YData, ZData);
   Log.trace("data: %d %d %d", XData, YData, ZData);
-
   MotionEntry measurement(Time.now(), 'i', XData, YData, ZData);
   _ring.fill(measurement);
 
-  if (_streamIntervalTimer.isActive())
-  {
-    _streamIntervalTimer.resetFromISR();
-  }
-  else
-  {
-    _streamIntervalTimer.startFromISR();
-  }
+  _sleepTimer.resetFromISR();
+  _streamIntervalTimer.resetFromISR();
   _streamingTimer.resetFromISR();
 
   // clear edge, else ISR won't trigger again

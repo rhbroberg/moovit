@@ -50,9 +50,6 @@ maybeSetRTC()
 void
 setup()
 {
-  // We are going to tell our device that D0 and D7 (which we named led1 and led2 respectively) are going to be output
-  // (That means that we will be sending voltage to them, rather than monitoring voltage that comes from them)
-
   Serial.begin(115200);
 
   // disable on-board RGB LED on Photon/Electron
@@ -70,7 +67,7 @@ setup()
   {
     Particle.connect();
   }
-  Log.info("done with setup");
+  Log.info("setup complete");
 }
 
 // Next we have the loop function, the other essential part of a microcontroller program.
@@ -80,14 +77,7 @@ setup()
 void
 loop()
 {
-#ifdef NO_MORE
-  int16_t XData, YData, ZData;
-  accelerometer.xyz(XData, YData, ZData);
-  Log.info("data: %d %d %d", XData, YData, ZData);
-#endif
-  //Log.info("memory: %ld", System.freeMemory());
-
   maybeSetRTC();
-  delay(1000);
   (void) entries.empty(512);
+  delay(1000);
 }
