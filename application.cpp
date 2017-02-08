@@ -205,20 +205,9 @@ setup()
   Log.info("done with setup");
 }
 
-// Next we have the loop function, the other essential part of a microcontroller program.
-// This routine gets repeated over and over, as quickly as possible and as many times as possible, after the setup function is called.
-// Note: Code that blocks for too long (like more than 5 seconds), can make weird things happen (like dropping the network connection).  The built-in delay function shown below safely interleaves required background motionDetected, so arbitrarily long delays can safely be done if you need them.
-
 void
-loop()
+maybeSetRTC()
 {
-#ifdef NO_MORE
-  int16_t XData, YData, ZData;
-  accelerometer.xyz(XData, YData, ZData);
-  Log.info("data: %d %d %d", XData, YData, ZData);
-#endif
-  //Log.info("memory: %ld", System.freeMemory());
-
   // reset RTC if in low power mode and haven't connected to Particle yet
   if (savePower)
   {
@@ -234,7 +223,24 @@ loop()
       Particle.disconnect();
     }
   }
+}
 
+
+// Next we have the loop function, the other essential part of a microcontroller program.
+// This routine gets repeated over and over, as quickly as possible and as many times as possible, after the setup function is called.
+// Note: Code that blocks for too long (like more than 5 seconds), can make weird things happen (like dropping the network connection).  The built-in delay function shown below safely interleaves required background motionDetected, so arbitrarily long delays can safely be done if you need them.
+
+void
+loop()
+{
+#ifdef NO_MORE
+  int16_t XData, YData, ZData;
+  accelerometer.xyz(XData, YData, ZData);
+  Log.info("data: %d %d %d", XData, YData, ZData);
+#endif
+  //Log.info("memory: %ld", System.freeMemory());
+
+  maybeSetRTC();
   delay(1000);
-  entries.empty(512);
+  (void) entries.empty(512);
 }

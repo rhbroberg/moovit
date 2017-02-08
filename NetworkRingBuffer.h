@@ -42,8 +42,10 @@ public:
   virtual ~NetworkRingBuffer ();
 
   const bool fill(const MotionEntry &);
-  void empty(const int16_t hunkSize);
+  const int16_t empty(const int16_t hunkSize);
+  const int16_t spaceLeft() const;
 
+protected:
   TCPClient _client;
   MotionEntry *_buffer;  // 100 samples/sec for 30s
   int32_t _length;

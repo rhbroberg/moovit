@@ -45,10 +45,11 @@ NetworkRingBuffer::fill(const MotionEntry &entry)
   return true;
 }
 
-void
+const int16_t
 NetworkRingBuffer::empty(const int16_t hunkSize)
 {
   int32_t startingTail;
+  int32_t hunksSent = 0;
 
   ATOMIC_BLOCK()
   {
@@ -69,13 +70,12 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
 	if (!_client.connect("ec2-54-175-5-136.compute-1.amazonaws.com", 32768))
 	{
 	  Log.warn("cannot connect to aws");
-	  return;
+	  return hunksSent;
 	}
       }
 
       Log.info("time for sending");
       int32_t ringIndex;
-      int32_t hunksSent = 0;
       for (int32_t i = _head; i < _head + hunkSize; i++)
       {
 	ringIndex = i%_length;
@@ -107,7 +107,22 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
     }
     else
     {
-      Log.trace("(easy) - not enough to be troubled (%ld vs %ld)", _head, startingTail);
+      Log.trace("not enough to be troubled (%ld vs %ld)", _head, startingTail);
     }
   }
+  return hunksSent;
+}
+
+const int16_t
+NetworkRingBuffer::spaceLeft() const
+{
+  int16_t remainingEntries;
+
+  ATOMIC_BLOCK()
+  {
+    int32_t offset = (_tail > _head) ? 0 : _length;
+    remainingEntries = (_tail + offset) - _head;
+  }
+
+  return remainingEntries;
 }
