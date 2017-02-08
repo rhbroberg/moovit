@@ -17,15 +17,15 @@ NetworkRingBuffer::NetworkRingBuffer (const int32_t length)
 
 NetworkRingBuffer::~NetworkRingBuffer ()
 {
-  // TODO Auto-generated destructor stub
+  delete[] _buffer;
 }
 
 const bool
 NetworkRingBuffer::fill(const MotionEntry &entry)
 {
-//  ATOMIC_BLOCK()
+  // must be atomic here; can be called from isr or from timer
+  ATOMIC_BLOCK()
   {
-    // doesn't handle wrap
     int32_t offset = (_head > _tail)? 0 : _length;
 
     if ((_head + offset) - _tail == 1)
@@ -74,7 +74,7 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
 	}
       }
 
-      Log.info("time for sending");
+      Log.info("starting backlog upload");
       int32_t ringIndex;
       for (int32_t i = _head; i < _head + hunkSize; i++)
       {
@@ -86,6 +86,7 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
 	if (lineSize >= sizeof(_line))
 	{
 	  Log.error("buffer overrun!  game over!");
+	  System.reset();
 	}
 
 	if (unsigned int written = _client.write((const uint8_t *)_line, lineSize) != lineSize)
@@ -95,8 +96,7 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
 	}
 	hunksSent++;
       }
-      Log.trace("done sending, closing now");
-      // _client.flush();
+      Log.trace("backlog sent");
       _client.stop();
 
       ATOMIC_BLOCK()

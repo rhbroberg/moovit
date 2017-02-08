@@ -1,14 +1,12 @@
 #include "application.h"
-#include "NetworkRingBuffer.h"
 #include "MotionTracker.h"
 
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
-NetworkRingBuffer entries(1024);
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 //SerialLogHandler logHandler(LOG_LEVEL_TRACE);
-MotionTracker tracker(entries);
+MotionTracker tracker(1024);
 bool savePower = false;
 
 void
@@ -78,6 +76,6 @@ void
 loop()
 {
   maybeSetRTC();
-  (void) entries.empty(512);
+  (void) tracker.upload(512);
   delay(1000);
 }

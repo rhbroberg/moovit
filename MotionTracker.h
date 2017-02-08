@@ -14,11 +14,10 @@
 class MotionTracker
 {
 public:
-  MotionTracker (NetworkRingBuffer &);
+  MotionTracker (const int32_t ringSize);
   virtual ~MotionTracker ();
   void begin();
-
-  // probably need methods to tweak timeouts
+  const int16_t upload(const int16_t);
 
 protected:
   int setTimer(String command, Timer &timer, String name);
@@ -36,7 +35,7 @@ protected:
   void suspendSelf();
   void turnLEDOff();
 
-  NetworkRingBuffer &_ring;
+  NetworkRingBuffer _ring;
   LIS331 accelerometer;
   Timer _sleepTimer;
   Timer _blinkTimer;

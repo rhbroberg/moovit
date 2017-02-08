@@ -7,8 +7,8 @@
 
 #include "MotionTracker.h"
 
-MotionTracker::MotionTracker (NetworkRingBuffer &buffer)
- : _ring(buffer)
+MotionTracker::MotionTracker (const int32_t ringSize)
+ : _ring(ringSize)
  , _sleepTimer(9930000, &MotionTracker::noActivity, *this, true)
  , _blinkTimer(10, &MotionTracker::turnLEDOff, *this, true)
  , _streamIntervalTimer(3000, &MotionTracker::stopStreaming, *this, true)
@@ -37,6 +37,12 @@ MotionTracker::begin()
   Particle.function("sleep-time", &MotionTracker::setSleepTime, this);
   Particle.function("interval", &MotionTracker::setIntervalTime, this);
   Particle.function("streaming", &MotionTracker::setStreamingTime, this);
+}
+
+const int16_t
+MotionTracker::upload(const int16_t hunk)
+{
+  return _ring.empty(hunk);
 }
 
 int
