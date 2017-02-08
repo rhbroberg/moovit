@@ -45,10 +45,11 @@ LIS331::begin(const int16_t chipSelectPin, const gScale g)
   SPI.setDataMode(SPI_MODE0);	//CPHA = CPOL = 0    MODE = 0
   SPI.setBitOrder(MSBFIRST);
 
-  SPIwriteOneRegister(CTRL_REG1, 0x37);  // normal mode, xyz-enabled
-  SPIwriteOneRegister(CTRL_REG2, 0x00);  // hp filter off
+  SPIwriteOneRegister(CTRL_REG1, 0x20 | 0x07 | 0x08);  // normal mode | xyz-enabled | 100Hz
+  //SPIwriteOneRegister(CTRL_REG1, 0x20 | 0x07 | 0x10);  // normal mode | xyz-enabled | 400Hz
+  SPIwriteOneRegister(CTRL_REG2, 0x10);  // hp filter on
   //  SPIwriteOneRegister(CTRL_REG4, 0x30);  // 24g
-  SPIwriteOneRegister(CTRL_REG4, 0x00);  // 6g
+  SPIwriteOneRegister(CTRL_REG4, 0x80);  // 6g, block-data update, little-endian
 }
 
 const int16_t
@@ -80,6 +81,12 @@ const int16_t
 LIS331::z() const
 {
   return location(OUT_Z_L, 'z');
+}
+
+const bool
+LIS331::xyzReady() const
+{
+  return SPIreadOneRegister(STATUS_REG) & 0x40;
 }
 
 void

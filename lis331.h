@@ -29,6 +29,7 @@ public:
   const int16_t y() const;
   const int16_t z() const;
   void xyz(int16_t &XData, int16_t &YData, int16_t &ZData) const;
+  const bool xyzReady() const;
 
   // interrupt routines
   void activityInterrupt(const byte threshold, const byte duration, const pin which, const byte mode);

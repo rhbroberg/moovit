@@ -30,7 +30,7 @@ NetworkRingBuffer::fill(const MotionEntry &entry)
 
     if ((_head + offset) - _tail == 1)
     {
-      Log.warn("ring buffer full (%ld vs %ld).  too bad!", _head, _tail);
+      Log.error("ring buffer full (%ld vs %ld).  too bad!", _head, _tail);
       return false;
     }
     else
@@ -66,18 +66,34 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
       if (!_client.connected())
       {
 	Log.info("connecting to aws");
-	_client.connect("ec2-54-175-5-136.compute-1.amazonaws.com", 32768);
+	if (!_client.connect("ec2-54-175-5-136.compute-1.amazonaws.com", 32768))
+	{
+	  Log.warn("cannot connect to aws");
+	  return;
+	}
       }
 
       Log.info("time for sending");
       int32_t ringIndex;
+      int32_t hunksSent = 0;
       for (int32_t i = _head; i < _head + hunkSize; i++)
       {
 	ringIndex = i%_length;
 	Log.trace("sending hunk %ld (index %ld) ", i, ringIndex);
 	MotionEntry *entry = &_buffer[ringIndex];
-	sprintf(_line, "%s,%c,%d,%d,%d\n", Time.format(entry->_time, TIME_FORMAT_ISO8601_FULL).c_str(), entry->_mode, entry->_x, entry->_y, entry->_z);
-	_client.write((const uint8_t *)_line, strlen(_line));
+	unsigned int lineSize = sprintf(_line, "%s,%c,%d,%d,%d\n", Time.format(entry->_time, TIME_FORMAT_ISO8601_FULL).c_str(), entry->_mode, entry->_x, entry->_y, entry->_z);
+
+	if (lineSize >= sizeof(_line))
+	{
+	  Log.error("buffer overrun!  game over!");
+	}
+
+	if (unsigned int written = _client.write((const uint8_t *)_line, lineSize) != lineSize)
+	{
+	  Log.warn("network write partially failed; will try again later (%d/%d) (hunk %ld)", written, lineSize, i - _head);
+	  break;
+	}
+	hunksSent++;
       }
       Log.trace("done sending, closing now");
       // _client.flush();
@@ -85,7 +101,7 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
 
       ATOMIC_BLOCK()
       {
-	_head += hunkSize;
+	_head += hunksSent;
 	_head %= _length;
       }
     }

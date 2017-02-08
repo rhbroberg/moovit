@@ -29,11 +29,14 @@ sampleMe()
 {
   static MotionEntry measurement;
 
-  accelerometer.xyz(measurement._x, measurement._y, measurement._z);
-  measurement._time = Time.now();
-  measurement._mode = 's';
+  if (accelerometer.xyzReady())
+  {
+    accelerometer.xyz(measurement._x, measurement._y, measurement._z);
+    measurement._time = Time.now();
+    measurement._mode = 's';
 
-  entries.fill(measurement);
+    entries.fill(measurement);
+  }
 }
 
 void
@@ -233,5 +236,5 @@ loop()
   }
 
   delay(1000);
-  entries.empty(256);
+  entries.empty(512);
 }
