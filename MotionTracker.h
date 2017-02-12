@@ -14,7 +14,7 @@
 class MotionTracker
 {
 public:
-  MotionTracker (const int32_t ringSize);
+  MotionTracker (const int32_t ringSize, const int pin);
   virtual ~MotionTracker ();
   void begin();
   const int16_t upload(const int16_t);
@@ -44,4 +44,5 @@ protected:
 
   volatile uint32_t _lastActivityTime;
   int _boardLED;
+  int _interruptPin;
 };

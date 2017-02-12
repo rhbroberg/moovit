@@ -62,7 +62,7 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
   {
     Log.trace("there is work to be done");
 
-    if ((startingTail + offset) - _head > hunkSize)
+    if ((startingTail + offset) - _head >= hunkSize)
     {
       if (!_client.connected())
       {
@@ -98,6 +98,7 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
       }
       Log.trace("backlog sent");
       _client.stop();
+      Particle.process();
 
       ATOMIC_BLOCK()
       {

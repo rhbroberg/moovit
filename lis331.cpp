@@ -45,8 +45,8 @@ LIS331::begin(const int16_t chipSelectPin, const gScale g)
   SPI.setDataMode(SPI_MODE0);	//CPHA = CPOL = 0    MODE = 0
   SPI.setBitOrder(MSBFIRST);
 
-  SPIwriteOneRegister(CTRL_REG1, 0x20 | 0x07 | 0x08);  // normal mode | xyz-enabled | 100Hz
-  //SPIwriteOneRegister(CTRL_REG1, 0x20 | 0x07 | 0x10);  // normal mode | xyz-enabled | 400Hz
+  //SPIwriteOneRegister(CTRL_REG1, 0x20 | 0x07 | 0x08);  // normal mode | xyz-enabled | 100Hz
+  SPIwriteOneRegister(CTRL_REG1, 0x20 | 0x07 | 0x10);  // normal mode | xyz-enabled | 400Hz
   SPIwriteOneRegister(CTRL_REG2, 0x10);  // hp filter on
   //  SPIwriteOneRegister(CTRL_REG4, 0x30);  // 24g
   SPIwriteOneRegister(CTRL_REG4, 0x80);  // 6g, block-data update, little-endian
@@ -90,26 +90,26 @@ LIS331::xyzReady() const
 }
 
 void
-LIS331::xyz(int16_t &XregValue, int16_t &YregValue, int16_t &ZregValue) const
+LIS331::xyz(int16_t &x, int16_t &y, int16_t &z) const
 {
   // burst SPI read
   // A burst read of all three axis is required to guarantee all measurements correspond to same sample time
   digitalWrite(_slaveSelectPin, LOW);
   SPI.transfer(0x80 | 0x40 | OUT_X_L);  // read consecutive starting at low byte of x register
-  XregValue = SPI.transfer(0x00);
-  XregValue = XregValue + (SPI.transfer(0x00) << 8);
+  x = SPI.transfer(0x00);
+  x = x + (SPI.transfer(0x00) << 8);
 
-  YregValue = SPI.transfer(0x00);
-  YregValue = YregValue + (SPI.transfer(0x00) << 8);
+  y = SPI.transfer(0x00);
+  y = y + (SPI.transfer(0x00) << 8);
 
-  ZregValue = SPI.transfer(0x00);
-  ZregValue = ZregValue + (SPI.transfer(0x00) << 8);
+  z = SPI.transfer(0x00);
+  z = z + (SPI.transfer(0x00) << 8);
 
   digitalWrite(_slaveSelectPin, HIGH);
 
   if (Log.isLevelEnabled(LOG_LEVEL_TRACE))
   {
-    Log.trace("x: %d; y: %d; z: %d", XregValue, YregValue, ZregValue);
+    Log.trace("x: %d; y: %d; z: %d", x, y, z);
   }
 }
 

@@ -6,7 +6,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 //SerialLogHandler logHandler(LOG_LEVEL_TRACE);
-MotionTracker tracker(1024);
+MotionTracker tracker(512, A1);	// use D1 or A1 (for all same side board connections).  using A0 conflicts with on-board LED; D0 conflicts as well
 bool savePower = false;
 
 void
@@ -76,6 +76,6 @@ void
 loop()
 {
   maybeSetRTC();
-  (void) tracker.upload(512);
+  (void) tracker.upload(128);
   delay(1000);
 }

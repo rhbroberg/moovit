@@ -7,14 +7,15 @@
 
 #include "MotionTracker.h"
 
-MotionTracker::MotionTracker (const int32_t ringSize)
+MotionTracker::MotionTracker (const int32_t ringSize, const int interruptPin)
  : _ring(ringSize)
- , _sleepTimer(9930000, &MotionTracker::noActivity, *this, true)
+ , _sleepTimer(5000, &MotionTracker::noActivity, *this, true)
  , _blinkTimer(10, &MotionTracker::turnLEDOff, *this, true)
- , _streamIntervalTimer(3000, &MotionTracker::stopStreaming, *this, true)
+ , _streamIntervalTimer(1000, &MotionTracker::stopStreaming, *this, true)
  , _streamingTimer(10, &MotionTracker::sampleStream, *this, false)
  , _lastActivityTime(0)
  , _boardLED(D7)
+ , _interruptPin(interruptPin)
 {
 }
 
@@ -117,9 +118,11 @@ MotionTracker::turnLEDOff()
 void
 MotionTracker::suspendSelf()
 {
+  Log.info("preparing to sleep - sending remaining buffer data");
+  upload(_ring.spaceLeft());
   Log.info("going to sleep now");
   Serial.flush();
-  detachInterrupt(D1);	// interrupt also wired to WKUP pin
+  detachInterrupt(_interruptPin);	// interrupt also wired to WKUP pin
   _sleepTimer.stop();
 
   accelerometer.sleepMode(5, 0x5, 0x0, LIS331::interrupt1, 0x2A);
@@ -128,7 +131,7 @@ MotionTracker::suspendSelf()
 #ifdef DEEP_IS_BETTER
   System.sleep(SLEEP_MODE_DEEP, 60);
 #else
-  System.sleep(D1,RISING);
+  System.sleep(_interruptPin,RISING);
 
 #ifdef NO_ISR_AFTER_SLEEP
   accelerometer.SPIwriteOneRegister(0x30, 0x00);  // clear interrupt axes
@@ -179,10 +182,10 @@ MotionTracker::motionDetected()
   logEvery(100000);
   blinkNotify();
 
-  int16_t XData, YData, ZData;
-  accelerometer.xyz(XData, YData, ZData);
-  Log.trace("data: %d %d %d", XData, YData, ZData);
-  MotionEntry measurement(Time.now(), 'i', XData, YData, ZData);
+  int16_t x, y, z;
+  accelerometer.xyz(x, y, z);
+  Log.trace("data: %d %d %d", x, y, z);
+  MotionEntry measurement(Time.now(), 'i', x, y, z);
   _ring.fill(measurement);
 
   _sleepTimer.resetFromISR();
@@ -196,9 +199,9 @@ MotionTracker::motionDetected()
 void
 MotionTracker::monitorAccelerometer()
 {
-  pinMode(D1, INPUT);
+  pinMode(_interruptPin, INPUT);
   _sleepTimer.start();
   accelerometer.begin(SS);
   accelerometer.activityInterrupt(0x2, 0x01, LIS331::interrupt1, 0xAA);
-  attachInterrupt(D1, &MotionTracker::motionDetected, this, RISING);
+  attachInterrupt(_interruptPin, &MotionTracker::motionDetected, this, RISING);
 }
