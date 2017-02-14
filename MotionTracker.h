@@ -10,6 +10,7 @@
 #include "application.h"
 #include "lis331.h"
 #include "NetworkRingBuffer.h"
+#include "ActivityDigest.h"
 
 class MotionTracker
 {
@@ -19,7 +20,8 @@ public:
   void begin();
   const int16_t upload(const int16_t);
 
-protected:
+//protected:
+  void button_handler(system_event_t event, int duration, void* );
   int setTimer(String command, Timer &timer, String name);
   int setSleepTime(String);
   int setIntervalTime(String);
@@ -34,6 +36,7 @@ protected:
   void stopStreaming();
   void suspendSelf();
   void turnLEDOff();
+  void publishDigest();
 
   NetworkRingBuffer _ring;
   LIS331 accelerometer;
@@ -41,6 +44,8 @@ protected:
   Timer _blinkTimer;
   Timer _streamIntervalTimer;
   Timer _streamingTimer;
+  Timer _publishDigestTimer;
+  ActivityDigest _digest;
 
   volatile uint32_t _lastActivityTime;
   int _boardLED;

@@ -98,7 +98,6 @@ NetworkRingBuffer::empty(const int16_t hunkSize)
       }
       Log.trace("backlog sent");
       _client.stop();
-      Particle.process();
 
       ATOMIC_BLOCK()
       {

@@ -7,16 +7,20 @@
 
 #include "MotionTracker.h"
 
+
 MotionTracker::MotionTracker (const int32_t ringSize, const int interruptPin)
  : _ring(ringSize)
- , _sleepTimer(5000, &MotionTracker::noActivity, *this, true)
+ , _sleepTimer(30000, &MotionTracker::noActivity, *this, true)
  , _blinkTimer(10, &MotionTracker::turnLEDOff, *this, true)
  , _streamIntervalTimer(1000, &MotionTracker::stopStreaming, *this, true)
  , _streamingTimer(10, &MotionTracker::sampleStream, *this, false)
+ , _publishDigestTimer(15000, &MotionTracker::publishDigest, *this, false)
+ , _digest()
  , _lastActivityTime(0)
  , _boardLED(D7)
  , _interruptPin(interruptPin)
 {
+  _digest.dump();
 }
 
 MotionTracker::~MotionTracker ()
@@ -38,6 +42,12 @@ MotionTracker::begin()
   Particle.function("sleep-time", &MotionTracker::setSleepTime, this);
   Particle.function("interval", &MotionTracker::setIntervalTime, this);
   Particle.function("streaming", &MotionTracker::setStreamingTime, this);
+}
+
+void
+MotionTracker::publishDigest()
+{
+  Log.info("publishing digest");
 }
 
 const int16_t
@@ -187,6 +197,7 @@ MotionTracker::motionDetected()
   Log.trace("data: %d %d %d", x, y, z);
   MotionEntry measurement(Time.now(), 'i', x, y, z);
   _ring.fill(measurement);
+  _digest.registerActivity(measurement);
 
   _sleepTimer.resetFromISR();
   _streamIntervalTimer.resetFromISR();

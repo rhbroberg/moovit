@@ -3,6 +3,7 @@
 
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
+STARTUP(System.enableFeature(FEATURE_RETAINED_MEMORY));
 
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 //SerialLogHandler logHandler(LOG_LEVEL_TRACE);
@@ -46,9 +47,22 @@ maybeSetRTC()
 }
 
 void
+button_handler(system_event_t event, int duration, void* )
+{
+    if (!duration) { // just pressed
+    }
+    else { // just released
+      Log.info("release me");
+      //tracker._digest.dump();
+      tracker._digest.publishBacklog(60*24);
+    }
+}
+
+void
 setup()
 {
   Serial.begin(115200);
+  System.on(button_status, button_handler);
 
   // disable on-board RGB LED on Photon/Electron
   pinMode(RGBR, INPUT_PULLUP);
