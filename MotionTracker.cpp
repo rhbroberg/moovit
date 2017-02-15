@@ -200,8 +200,10 @@ MotionTracker::motionDetected()
   _digest.registerActivity(measurement);
 
   _sleepTimer.resetFromISR();
+#ifdef NOT_TODAY
   _streamIntervalTimer.resetFromISR();
   _streamingTimer.resetFromISR();
+#endif
 
   // clear edge, else ISR won't trigger again
   accelerometer.clearInterruptLatch(LIS331::interrupt1);

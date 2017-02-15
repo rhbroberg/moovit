@@ -54,7 +54,7 @@ button_handler(system_event_t event, int duration, void* )
     else { // just released
       Log.info("release me");
       //tracker._digest.dump();
-      tracker._digest.publishBacklog(60*24);
+      tracker._digest.publishBacklog(60*4);
     }
 }
 

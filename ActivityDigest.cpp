@@ -73,45 +73,57 @@ ActivityDigest::publishBacklog(const unsigned int entries)
   // individual backlog publish: each hour 2 publishes
   // expose function to publish now
   // expose function to set publish rate
-  static char publishBuf[256];
+  static char publishBuf[128];
 
+  // wait for 10s to attach to cloud; should be configurable
+  if (!waitFor(Particle.connected, 10000))
+  {
+    Log.warn("bummer, can't connect to cloud right not, try again later");
+    return false;
+  }
+
+  // must disable sleep timer during this backlog update - fix
   unsigned int initialActive;
   ATOMIC_BLOCK()
   {
     initialActive = _active;
   }
 
-  // do not send active minute (fixme)
-  for (unsigned int hunk = 0; hunk < (entries/_hunkSize) + 1; hunk++)
+  unsigned int initialLastUploaded = _lastUploaded;
+  byte messageLength = 0;
+  for (unsigned int i = 0; i < entries; i++)
   {
-    char *bufferIndex = publishBuf;
-    memset(publishBuf, 0, sizeof(publishBuf));
     uint16_t minuteSummary;
+    unsigned int timeOffset = (initialLastUploaded + 1 + i) % _capacity;
+    minuteSummary = _minutes[timeOffset];
 
-    for (unsigned int i = 0; i < (entries < _hunkSize ? entries : _hunkSize); i++)
+    if (messageLength == 0)
     {
-      unsigned int timeOffset = (_lastUploaded + hunk * _hunkSize + i) % _capacity;
-      minuteSummary = _minutes[timeOffset];
-      if (i == 0)
-      {
-	byte length = sprintf(publishBuf, "%d:%d", timeOffset, minuteSummary);
-	bufferIndex += length;
-      }
-      else
-      {
-	byte length = sprintf(bufferIndex, ",%d", minuteSummary);
-	bufferIndex += length;
-      }
-
-      Log.info("using index %d, bufferIndex = %d", timeOffset, bufferIndex - publishBuf);
+      memset(publishBuf, 0, sizeof(publishBuf));
+      messageLength += sprintf(publishBuf, "%d:%d", timeOffset, minuteSummary);
     }
-    Log.info("going to publish '%s'", publishBuf);
-    if (Particle.publish("activity", publishBuf) == false)
+    else
     {
-      Log.info("publish failed; leaving backlog");
-      return false;
+      messageLength += sprintf(&publishBuf[messageLength], ",%d", minuteSummary);
+    }
+    Log.info("using index %d, messageLength = %d", timeOffset, messageLength);
+
+    if ((messageLength > (sizeof(publishBuf) - 6 - 1)) // buffer - (max size of printed uint16_t) - (leave space for NULL terminator)
+	|| (i + 1 >= entries))
+    {
+      Log.info("going to publish '%s'", publishBuf);
+      if (!Particle.connected() || (Particle.publish("activity", publishBuf) == false))
+      {
+	Log.info("publish failed; leaving backlog, last minute uploaded was %d", _lastUploaded);
+	return false;
+      }
+      // particle.io mqtt throttles at 1/sec
+      delay(1000);
+      _lastUploaded = timeOffset;
+      messageLength = 0;
     }
   }
+
   return true;
 }
 
