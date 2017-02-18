@@ -15,6 +15,7 @@ MotionTracker::MotionTracker (const int32_t ringSize, const int interruptPin)
  , _streamIntervalTimer(1000, &MotionTracker::stopStreaming, *this, true)
  , _streamingTimer(10, &MotionTracker::sampleStream, *this, false)
  , _publishDigestTimer(15000, &MotionTracker::publishDigest, *this, false)
+ , _reactivateInterruptTimer(1000, &MotionTracker::reactivateInterrupt, *this, true)
  , _digest()
  , _lastActivityTime(0)
  , _boardLED(D7)
@@ -139,7 +140,7 @@ MotionTracker::suspendSelf()
 
 #define DEEP_IS_BETTER
 #ifdef DEEP_IS_BETTER
-  System.sleep(SLEEP_MODE_DEEP, 60);
+  System.sleep(SLEEP_MODE_DEEP, 60 * 15); // wake up every 15 minutes unconditionally (make a parameter)
 #else
   System.sleep(_interruptPin,RISING);
 
@@ -204,7 +205,12 @@ MotionTracker::motionDetected()
   _streamIntervalTimer.resetFromISR();
   _streamingTimer.resetFromISR();
 #endif
+  _reactivateInterruptTimer.resetFromISR();
+}
 
+void
+MotionTracker::reactivateInterrupt()
+{
   // clear edge, else ISR won't trigger again
   accelerometer.clearInterruptLatch(LIS331::interrupt1);
 }

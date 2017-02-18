@@ -37,6 +37,7 @@ public:
   void suspendSelf();
   void turnLEDOff();
   void publishDigest();
+  void reactivateInterrupt();
 
   NetworkRingBuffer _ring;
   LIS331 accelerometer;
@@ -45,6 +46,7 @@ public:
   Timer _streamIntervalTimer;
   Timer _streamingTimer;
   Timer _publishDigestTimer;
+  Timer _reactivateInterruptTimer;
   ActivityDigest _digest;
 
   volatile uint32_t _lastActivityTime;

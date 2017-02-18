@@ -151,7 +151,8 @@ LIS331::disableInterrupt(const pin which)
 void
 LIS331::enableInterrupt(const pin which)
 {
-  SPIwriteOneRegister(0x30, 0xAA);  // enable interrupt mode 'AND' mode
+//  SPIwriteOneRegister(0x30, 0xAA);  // enable interrupt mode 'AND' mode
+  SPIwriteOneRegister(0x30, 0x2A);  // enable interrupt mode 'AND' mode
 }
 
 void
